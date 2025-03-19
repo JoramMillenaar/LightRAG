@@ -1,15 +1,13 @@
 import asyncio
+import configparser
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Union, final
+
 import numpy as np
-import configparser
-
-from lightrag.types import KnowledgeGraph, KnowledgeGraphNode, KnowledgeGraphEdge
-
-import sys
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -17,6 +15,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from lightrag.types import KnowledgeGraph, KnowledgeGraphNode, KnowledgeGraphEdge
 from ..base import (
     BaseGraphStorage,
     BaseKVStorage,
@@ -96,8 +95,8 @@ class PostgreSQLDB:
                 f"select create_graph('{graph_name}')"
             )
         except (
-            asyncpg.exceptions.InvalidSchemaNameError,
-            asyncpg.exceptions.UniqueViolationError,
+                asyncpg.exceptions.InvalidSchemaNameError,
+                asyncpg.exceptions.UniqueViolationError,
         ):
             pass
 
@@ -119,12 +118,12 @@ class PostgreSQLDB:
                     raise e
 
     async def query(
-        self,
-        sql: str,
-        params: dict[str, Any] | None = None,
-        multirows: bool = False,
-        with_age: bool = False,
-        graph_name: str | None = None,
+            self,
+            sql: str,
+            params: dict[str, Any] | None = None,
+            multirows: bool = False,
+            with_age: bool = False,
+            graph_name: str | None = None,
     ) -> dict[str, Any] | None | list[dict[str, Any]]:
         async with self.pool.acquire() as connection:  # type: ignore
             if with_age and graph_name:
@@ -156,12 +155,12 @@ class PostgreSQLDB:
                 raise
 
     async def execute(
-        self,
-        sql: str,
-        data: dict[str, Any] | None = None,
-        upsert: bool = False,
-        with_age: bool = False,
-        graph_name: str | None = None,
+            self,
+            sql: str,
+            data: dict[str, Any] | None = None,
+            upsert: bool = False,
+            with_age: bool = False,
+            graph_name: str | None = None,
     ):
         try:
             async with self.pool.acquire() as connection:  # type: ignore
@@ -175,8 +174,8 @@ class PostgreSQLDB:
                 else:
                     await connection.execute(sql, *data.values())  # type: ignore
         except (
-            asyncpg.exceptions.UniqueViolationError,
-            asyncpg.exceptions.DuplicateTableError,
+                asyncpg.exceptions.UniqueViolationError,
+                asyncpg.exceptions.DuplicateTableError,
         ) as e:
             if upsert:
                 print("Key value duplicate, but upsert succeeded.")
@@ -488,7 +487,7 @@ class PGVectorStorage(BaseVectorStorage):
         ]
         contents = [v["content"] for v in data.values()]
         batches = [
-            contents[i : i + self._max_batch_size]
+            contents[i: i + self._max_batch_size]
             for i in range(0, len(contents), self._max_batch_size)
         ]
 
@@ -512,7 +511,7 @@ class PGVectorStorage(BaseVectorStorage):
 
     #################### query method ###############
     async def query(
-        self, query: str, top_k: int, ids: list[str] | None = None
+            self, query: str, top_k: int, ids: list[str] | None = None
     ) -> list[dict[str, Any]]:
         embeddings = await self.embedding_func([query])
         embedding = embeddings[0]
@@ -747,8 +746,30 @@ class PGDocStatusStorage(DocStatusStorage):
             )
 
     async def get_by_ids(self, ids: list[str]) -> list[dict[str, Any]]:
-        """Get doc_chunks data by id"""
-        raise NotImplementedError
+        """Get doc_chunks data by multiple IDs."""
+        if not ids:
+            return []
+
+        sql = "SELECT * FROM LIGHTRAG_DOC_STATUS WHERE workspace=$1 AND id = ANY($2)"
+        params = {"workspace": self.db.workspace, "ids": ids}
+
+        results = await self.db.query(sql, params, True)
+
+        if not results:
+            return []
+        return [
+            {
+                "content": row["content"],
+                "content_length": row["content_length"],
+                "content_summary": row["content_summary"],
+                "status": row["status"],
+                "chunks_count": row["chunks_count"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "file_path": row["file_path"],
+            }
+            for row in results
+        ]
 
     async def get_status_counts(self) -> dict[str, int]:
         """Get counts of documents in each status"""
@@ -763,7 +784,7 @@ class PGDocStatusStorage(DocStatusStorage):
         return counts
 
     async def get_docs_by_status(
-        self, status: DocStatus
+            self, status: DocStatus
     ) -> dict[str, DocProcessingStatus]:
         """all documents with a specific status"""
         sql = "select * from LIGHTRAG_DOC_STATUS where workspace=$1 and status=$2"
@@ -979,7 +1000,7 @@ class PGGraphStorage(BaseGraphStorage):
 
     @staticmethod
     def _format_properties(
-        properties: dict[str, Any], _id: Union[str, None] = None
+            properties: dict[str, Any], _id: Union[str, None] = None
     ) -> str:
         """
         Convert a dictionary of properties to a string representation that
@@ -1054,10 +1075,10 @@ class PGGraphStorage(BaseGraphStorage):
         return field.replace("(", "_").replace(")", "")
 
     async def _query(
-        self,
-        query: str,
-        readonly: bool = True,
-        upsert: bool = False,
+            self,
+            query: str,
+            readonly: bool = True,
+            upsert: bool = False,
     ) -> list[dict[str, Any]]:
         """
         Query the graph by taking a cypher query, converting it to an
@@ -1171,7 +1192,7 @@ class PGGraphStorage(BaseGraphStorage):
         return degrees
 
     async def get_edge(
-        self, source_node_id: str, target_node_id: str
+            self, source_node_id: str, target_node_id: str
     ) -> dict[str, str] | None:
         src_label = self._encode_graph_label(source_node_id.strip('"'))
         tgt_label = self._encode_graph_label(target_node_id.strip('"'))
@@ -1266,7 +1287,7 @@ class PGGraphStorage(BaseGraphStorage):
         retry=retry_if_exception_type((PGGraphQueryException,)),
     )
     async def upsert_edge(
-        self, source_node_id: str, target_node_id: str, edge_data: dict[str, str]
+            self, source_node_id: str, target_node_id: str, edge_data: dict[str, str]
     ) -> None:
         """
         Upsert an edge and its properties between two nodes identified by their labels.
@@ -1384,11 +1405,11 @@ class PGGraphStorage(BaseGraphStorage):
             list[str]: A list of all labels in the graph.
         """
         query = (
-            """SELECT * FROM cypher('%s', $$
-                     MATCH (n:Entity)
-                     RETURN DISTINCT n.node_id AS label
-                   $$) AS (label text)"""
-            % self.graph_name
+                """SELECT * FROM cypher('%s', $$
+                         MATCH (n:Entity)
+                         RETURN DISTINCT n.node_id AS label
+                       $$) AS (label text)"""
+                % self.graph_name
         )
 
         results = await self._query(query)
@@ -1397,7 +1418,7 @@ class PGGraphStorage(BaseGraphStorage):
         return labels
 
     async def embed_nodes(
-        self, algorithm: str
+            self, algorithm: str
     ) -> tuple[np.ndarray[Any, Any], list[str]]:
         """
         Generate node embeddings using the specified algorithm.
@@ -1415,7 +1436,7 @@ class PGGraphStorage(BaseGraphStorage):
         return await embed_func()
 
     async def get_knowledge_graph(
-        self, node_label: str, max_depth: int = 5
+            self, node_label: str, max_depth: int = 5
     ) -> KnowledgeGraph:
         """
         Retrieve a subgraph containing the specified node and its neighbors up to the specified depth.
@@ -1618,7 +1639,6 @@ TABLES = {
 	              )"""
     },
 }
-
 
 SQL_TEMPLATES = {
     # SQL for KVStorage
