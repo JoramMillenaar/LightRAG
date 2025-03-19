@@ -1763,7 +1763,7 @@ SQL_TEMPLATES = {
     FROM (
         SELECT r.id, r.source_id, r.target_id, 1 - (r.content_vector <=> '[{embedding_string}]'::vector) as distance
         FROM LIGHTRAG_VDB_RELATION r
-        JOIN relevant_chunks c ON c.chunk_ids = ANY(r.chunk_ids)
+        JOIN relevant_chunks c ON c.chunk_id = ANY(r.chunk_ids)
         WHERE r.workspace=$1
     ) filtered
     WHERE distance>$2
@@ -1780,7 +1780,7 @@ SQL_TEMPLATES = {
             (
                 SELECT e.id, e.entity_name, 1 - (e.content_vector <=> '[{embedding_string}]'::vector) as distance
                 FROM LIGHTRAG_VDB_ENTITY e
-                JOIN relevant_chunks c ON c.chunk_ids = ANY(e.chunk_ids)
+                JOIN relevant_chunks c ON c.chunk_id = ANY(e.chunk_ids)
                 WHERE e.workspace=$1
             )
         WHERE distance>$2
